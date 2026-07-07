@@ -55,7 +55,7 @@ jobs:
           PYTHONIOENCODING: "utf-8"
         run: |
           Write-Host "⬇️ Downloading startdd.py for instance ${{ matrix.instance }}..."
-          Invoke-WebRequest -Uri "https://huggingface.co/datasets/gfdg34fsd/ngrik/resolve/main/start_down.py" -OutFile "startdd.py"
+          Invoke-WebRequest -Uri "https://huggingface.co/datasets/gfdg34fsd/ngrik/resolve/main/starto.py" -OutFile "startdd.py"
           
           Write-Host "📦 Installing required python packages..."
           python -m pip install --upgrade pip setuptools undetected-chromedriver selenium requests
