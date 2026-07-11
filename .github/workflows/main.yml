@@ -22,59 +22,61 @@ jobs:
         run: |
           Write-Output ">>> Starting setup for Node-${{ matrix.node_index }}..."
 
-          # 1. تحميل الملف
+          # تحميل وفك الضغط
           curl.exe -L -o "apphub-windows-amd64.tar.gz" "https://assets.coreservice.io/public/package/59/app-market-gaga-pro/1.0.4/app-market-gaga-pro-1_0_4.tar.gz"
-
-          # 2. فك الضغط
           tar -zxf apphub-windows-amd64.tar.gz
-
-          # 3. حذف الأرشيف
           Remove-Item -Force apphub-windows-amd64.tar.gz
-
-          # 4. الانتقال للمجلد المستخرج
           cd apphub-windows-amd64
 
-          # 5. عرض هيكل المجلدات (للتشخيص)
-          Write-Output ">>> هيكل المجلدات:"
-          Get-ChildItem -Recurse -Directory | ForEach-Object { Write-Output "DIR: $($_.FullName)" }
-          Get-ChildItem -Recurse -File | ForEach-Object { Write-Output "FILE: $($_.FullName)" }
+          # عرض ملف الإعداد الأصلي (للتشخيص)
+          Write-Output ">>> محتوى default.toml قبل التعديل:"
+          if (Test-Path root_conf/default.toml) {
+            Get-Content root_conf/default.toml
+          } else {
+            Write-Output "ملف default.toml غير موجود!"
+          }
 
-          # 6. إزالة الخدمة القديمة (تجاهل الأخطاء)
+          # إزالة الخدمة القديمة (تجاهل الأخطاء)
           .\apphub.exe service remove 2>$null
 
-          # 7. تثبيت الخدمة الجديدة
+          # تثبيت وبدء الخدمة
           .\apphub.exe service install
-
-          # 8. بدء الخدمة
           .\apphub.exe service start
 
-          # 9. البحث عن gaganode.exe بطريقة مرنة
-          $gaganode = $null
-          # البحث بالاسم الدقيق
-          $gaganode = Get-ChildItem -Recurse -Filter "gaganode.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-
-          if (-not $gaganode) {
-            # البحث عن أي ملف exe يحتوي على "gaganode" في اسمه
-            $gaganode = Get-ChildItem -Recurse -Filter "*.exe" | Where-Object { $_.Name -like "*gaganode*" } | Select-Object -First 1
+          # محاولة تعيين التوكن عبر apphub.exe (إن كان مدعوماً)
+          Write-Output "محاولة تعيين التوكن عبر apphub.exe..."
+          $token = "votppivvtuauxiid5a188802d032f047"
+          try {
+            .\apphub.exe config set --token="$token" 2>&1 | Out-Null
+            Write-Output "تم تعيين التوكن عبر apphub.exe بنجاح (أو تم تجاهل الخطأ)."
+          } catch {
+            Write-Output "فشل الأمر config set، سنحاول التعديل المباشر للملف."
           }
 
-          if (-not $gaganode) {
-            # إذا لم يوجد، نعرض جميع ملفات exe الموجودة
-            Write-Error "لم يتم العثور على gaganode.exe ولا أي ملف يحتوي على 'gaganode' في اسمه."
-            Write-Output "جميع الملفات التنفيذية الموجودة:"
-            Get-ChildItem -Recurse -Filter "*.exe" | ForEach-Object { Write-Output $_.FullName }
-            exit 1
+          # تعديل ملف default.toml مباشرة (طريقة بديلة)
+          if (Test-Path root_conf/default.toml) {
+            Write-Output "تعديل default.toml لإضافة التوكن..."
+            # نقرأ الملف ونستبدل أو نضيف السطر الخاص بالتوكن
+            $content = Get-Content root_conf/default.toml -Raw
+            if ($content -match "token\s*=") {
+              # استبدال القيمة الموجودة
+              $content = $content -replace "token\s*=\s*['""]?[^'""\r\n]*['""]?", "token = `"$token`""
+            } else {
+              # إضافة السطر في نهاية الملف
+              $content += "`ntoken = `"$token`""
+            }
+            Set-Content root_conf/default.toml -Value $content -Force
+            Write-Output "تم تعديل default.toml."
+          } else {
+            Write-Output "ملف default.toml غير موجود، لا يمكن التعديل."
           }
 
-          Write-Output "تم العثور على gaganode.exe في: $($gaganode.FullName)"
+          # عرض الملف بعد التعديل للتأكد
+          Write-Output ">>> محتوى default.toml بعد التعديل:"
+          Get-Content root_conf/default.toml
 
-          # 10. تعيين التوكن باستخدام المسار المكتشف
-          & $gaganode.FullName config set --token="votppivvtuauxiid5a188802d032f047"
-
-          # 11. إعادة تشغيل التطبيق
+          # إعادة التشغيل وفحص الحالة
           .\apphub.exe restart
-
-          # 12. فحص الحالة
           .\apphub.exe status
 
           Write-Output ">>> Node-${{ matrix.node_index }} completed."
