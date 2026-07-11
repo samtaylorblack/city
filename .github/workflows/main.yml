@@ -1,9 +1,9 @@
 name: Background Task Automation
 
 on:
-  workflow_dispatch:  # تشغيل يدوي
+  workflow_dispatch:
   schedule:
-    - cron: '0 */8 * * *'  # كل 8 ساعات
+    - cron: '0 */8 * * *'
 
 jobs:
   execute-nodes:
@@ -18,34 +18,38 @@ jobs:
 
     steps:
       - name: Download & Install AppHub Service
-        shell: pwsh  # استخدام PowerShell
+        shell: pwsh
         run: |
           Write-Output ">>> Starting setup for Node-${{ matrix.node_index }}..."
 
-          # 1. تحميل وفك الضغط
-          wget -Uri "https://assets.coreservice.io/public/package/59/app-market-gaga-pro/1.0.4/app-market-gaga-pro-1_0_4.tar.gz" -OutFile "apphub-windows-amd64.tar.gz"
+          # 1. تحميل الملف باستخدام curl.exe (موجود في ويندوز)
+          curl.exe -L -o "apphub-windows-amd64.tar.gz" "https://assets.coreservice.io/public/package/59/app-market-gaga-pro/1.0.4/app-market-gaga-pro-1_0_4.tar.gz"
+
+          # 2. فك الضغط باستخدام tar (موجود في ويندوز 2022)
           tar -zxf apphub-windows-amd64.tar.gz
+
+          # 3. حذف الأرشيف
           Remove-Item -Force apphub-windows-amd64.tar.gz
-          
-          # 2. الدخول للمجلد
+
+          # 4. الانتقال للمجلد المستخرج
           cd apphub-windows-amd64
 
-          # 3. إزالة الخدمة القديمة (تجاهل الأخطاء)
-          .\apphub.exe service remove | Out-Null
+          # 5. إزالة الخدمة القديمة (تجاهل الأخطاء)
+          .\apphub.exe service remove 2>$null
 
-          # 4. تثبيت الخدمة الجديدة
+          # 6. تثبيت الخدمة الجديدة
           .\apphub.exe service install
 
-          # 5. بدء الخدمة
+          # 7. بدء الخدمة
           .\apphub.exe service start
 
-          # 6. تعيين التوكن
+          # 8. تعيين التوكن
           .\apps\gaganode\gaganode.exe config set --token="votppivvtuauxiid5a188802d032f047"
 
-          # 7. إعادة التشغيل
+          # 9. إعادة التشغيل
           .\apphub.exe restart
 
-          # 8. فحص الحالة
+          # 10. فحص الحالة
           .\apphub.exe status
 
           Write-Output ">>> Node-${{ matrix.node_index }} completed."
