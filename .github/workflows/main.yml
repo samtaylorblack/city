@@ -9,7 +9,7 @@ jobs:
   execute-nodes:
     name: Worker-Instance [${{ matrix.node_index }}]
     runs-on: windows-2022
-    timeout-minutes: 305
+    timeout-minutes: 305  # 5 ساعات + 5 دقائق احتياطي
 
     strategy:
       fail-fast: false
@@ -22,61 +22,72 @@ jobs:
         run: |
           Write-Output ">>> Starting setup for Node-${{ matrix.node_index }}..."
 
-          # تحميل وفك الضغط
+          # 1. تحميل الملف
           curl.exe -L -o "apphub-windows-amd64.tar.gz" "https://assets.coreservice.io/public/package/59/app-market-gaga-pro/1.0.4/app-market-gaga-pro-1_0_4.tar.gz"
+
+          # 2. فك الضغط
           tar -zxf apphub-windows-amd64.tar.gz
+
+          # 3. حذف الأرشيف
           Remove-Item -Force apphub-windows-amd64.tar.gz
+
+          # 4. الانتقال للمجلد
           cd apphub-windows-amd64
 
-          # عرض ملف الإعداد الأصلي (للتشخيص)
-          Write-Output ">>> محتوى default.toml قبل التعديل:"
-          if (Test-Path root_conf/default.toml) {
-            Get-Content root_conf/default.toml
-          } else {
-            Write-Output "ملف default.toml غير موجود!"
-          }
-
-          # إزالة الخدمة القديمة (تجاهل الأخطاء)
+          # 5. إزالة الخدمة القديمة (تجاهل الأخطاء)
           .\apphub.exe service remove 2>$null
 
-          # تثبيت وبدء الخدمة
+          # 6. تثبيت الخدمة الجديدة
           .\apphub.exe service install
+
+          # 7. بدء الخدمة
           .\apphub.exe service start
 
-          # محاولة تعيين التوكن عبر apphub.exe (إن كان مدعوماً)
-          Write-Output "محاولة تعيين التوكن عبر apphub.exe..."
-          $token = "votppivvtuauxiid5a188802d032f047"
-          try {
-            .\apphub.exe config set --token="$token" 2>&1 | Out-Null
-            Write-Output "تم تعيين التوكن عبر apphub.exe بنجاح (أو تم تجاهل الخطأ)."
-          } catch {
-            Write-Output "فشل الأمر config set، سنحاول التعديل المباشر للملف."
-          }
+          # 8. تعديل default.toml لإضافة التوكن (بديل عن gaganode.exe)
+          $configFile = ".\root_conf\default.toml"
+          Write-Output ">>> محتوى default.toml قبل التعديل:"
+          Get-Content $configFile
 
-          # تعديل ملف default.toml مباشرة (طريقة بديلة)
-          if (Test-Path root_conf/default.toml) {
-            Write-Output "تعديل default.toml لإضافة التوكن..."
-            # نقرأ الملف ونستبدل أو نضيف السطر الخاص بالتوكن
-            $content = Get-Content root_conf/default.toml -Raw
-            if ($content -match "token\s*=") {
-              # استبدال القيمة الموجودة
-              $content = $content -replace "token\s*=\s*['""]?[^'""\r\n]*['""]?", "token = `"$token`""
-            } else {
-              # إضافة السطر في نهاية الملف
-              $content += "`ntoken = `"$token`""
-            }
-            Set-Content root_conf/default.toml -Value $content -Force
-            Write-Output "تم تعديل default.toml."
+          # إضافة سطر token إذا لم يكن موجوداً
+          $tokenLine = 'token = "votppivvtuauxiid5a188802d032f047"'
+          if (-not (Select-String -Path $configFile -Pattern "token")) {
+            Add-Content -Path $configFile -Value $tokenLine
           } else {
-            Write-Output "ملف default.toml غير موجود، لا يمكن التعديل."
+            # استبدال السطر إذا كان موجوداً
+            (Get-Content $configFile) -replace 'token = .*', $tokenLine | Set-Content $configFile
           }
 
-          # عرض الملف بعد التعديل للتأكد
           Write-Output ">>> محتوى default.toml بعد التعديل:"
-          Get-Content root_conf/default.toml
+          Get-Content $configFile
 
-          # إعادة التشغيل وفحص الحالة
+          # 9. إعادة تشغيل التطبيق (لتطبيق التغييرات)
           .\apphub.exe restart
+
+          # 10. انتظار قليل للتأكد من إعادة التشغيل
+          Start-Sleep -Seconds 10
+
+          # 11. فحص الحالة الأولي
+          Write-Output ">>> الحالة بعد إعادة التشغيل:"
           .\apphub.exe status
 
-          Write-Output ">>> Node-${{ matrix.node_index }} completed."
+          Write-Output ">>> Node-${{ matrix.node_index }} جاهز. سيتم الانتظار لمدة 5 ساعات مع مراقبة الحالة..."
+
+          # 12. حلقة مراقبة لمدة 5 ساعات (18000 ثانية)
+          $endTime = (Get-Date).AddSeconds(18000)
+          $checkInterval = 60  # فحص كل دقيقة
+
+          while ((Get-Date) -lt $endTime) {
+            Start-Sleep -Seconds $checkInterval
+            $remaining = [math]::Round(($endTime - (Get-Date)).TotalMinutes)
+            Write-Output "[MONITOR] الوقت المتبقي: $remaining دقيقة - فحص الحالة..."
+            $status = .\apphub.exe status 2>&1
+            if ($LASTEXITCODE -ne 0) {
+              Write-Output "[WARNING] فشل فحص الحالة، قد تكون الخدمة متوقفة."
+              # محاولة إعادة التشغيل
+              .\apphub.exe restart
+            } else {
+              Write-Output "[OK] الخدمة تعمل."
+            }
+          }
+
+          Write-Output ">>> Node-${{ matrix.node_index }} أنهى فترة 5 ساعات."
