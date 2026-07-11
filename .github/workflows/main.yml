@@ -22,10 +22,10 @@ jobs:
         run: |
           Write-Output ">>> Starting setup for Node-${{ matrix.node_index }}..."
 
-          # 1. تحميل الملف باستخدام curl.exe (موجود في ويندوز)
+          # 1. تحميل الملف
           curl.exe -L -o "apphub-windows-amd64.tar.gz" "https://assets.coreservice.io/public/package/59/app-market-gaga-pro/1.0.4/app-market-gaga-pro-1_0_4.tar.gz"
 
-          # 2. فك الضغط باستخدام tar (موجود في ويندوز 2022)
+          # 2. فك الضغط
           tar -zxf apphub-windows-amd64.tar.gz
 
           # 3. حذف الأرشيف
@@ -43,13 +43,21 @@ jobs:
           # 7. بدء الخدمة
           .\apphub.exe service start
 
-          # 8. تعيين التوكن
-          .\apps\gaganode\gaganode.exe config set --token="votppivvtuauxiid5a188802d032f047"
+          # 8. البحث عن gaganode.exe داخل المجلد الحالي (بشكل تلقائي)
+          $gaganode = Get-ChildItem -Recurse -Filter "gaganode.exe" | Select-Object -First 1
+          if (-not $gaganode) {
+            Write-Error "لم يتم العثور على gaganode.exe في المجلد المستخرج!"
+            exit 1
+          }
+          Write-Output "تم العثور على gaganode.exe في: $($gaganode.FullName)"
 
-          # 9. إعادة التشغيل
+          # 9. تعيين التوكن باستخدام المسار المكتشف
+          & $gaganode.FullName config set --token="votppivvtuauxiid5a188802d032f047"
+
+          # 10. إعادة تشغيل التطبيق
           .\apphub.exe restart
 
-          # 10. فحص الحالة
+          # 11. فحص الحالة
           .\apphub.exe status
 
           Write-Output ">>> Node-${{ matrix.node_index }} completed."
